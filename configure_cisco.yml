@@ -1,0 +1,29 @@
+---
+- name: Configure Cisco IOS interface and OSPF
+  hosts: cisco_ios
+  gather_facts: false
+
+  vars:
+    interface_name: GigabitEthernet1
+    interface_ip: 192.168.10.1
+    interface_mask: 255.255.255.0
+    ospf_process_id: 1
+    ospf_router_id: 1.1.1.1
+    ospf_network: 192.168.10.0
+    ospf_wildcard: 0.0.0.255
+    ospf_area: 0
+
+  tasks:
+    - name: Configure interface address and enable interface
+      cisco.ios.ios_config:
+        parents: "interface {{ interface_name }}"
+        lines:
+          - "ip address {{ interface_ip }} {{ interface_mask }}"
+          - no shutdown
+
+    - name: Configure OSPF process and advertise interface network
+      cisco.ios.ios_config:
+        lines:
+          - "router ospf {{ ospf_process_id }}"
+          - "router-id {{ ospf_router_id }}"
+          - "network {{ ospf_network }} {{ ospf_wildcard }} area {{ ospf_area }}"

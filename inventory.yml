@@ -1,0 +1,16 @@
+---
+all:
+  children:
+    cisco_ios:
+      hosts:
+        router1:
+          # Replace with the management IP or DNS name of your Cisco IOS device.
+          ansible_host: 192.0.2.10
+      vars:
+        ansible_connection: ansible.netcommon.network_cli
+        ansible_network_os: cisco.ios.ios
+        ansible_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') }}"
+        ansible_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') }}"
+        ansible_become: true
+        ansible_become_method: enable
+        ansible_become_password: "{{ lookup('env', 'ANSIBLE_ENABLE_PASSWORD') }}"
