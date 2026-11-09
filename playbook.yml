@@ -1,0 +1,17 @@
+---
+- name: Read network device facts
+  hosts: network_devices
+  gather_facts: false
+
+  tasks:
+    - name: Gather basic facts from Cisco IOS devices (read-only)
+      cisco.ios.ios_facts:
+        gather_subset:
+          - min
+
+    - name: Display device summary
+      ansible.builtin.debug:
+        msg:
+          hostname: "{{ ansible_net_hostname | default(inventory_hostname) }}"
+          model: "{{ ansible_net_model | default('unknown') }}"
+          version: "{{ ansible_net_version | default('unknown') }}"
