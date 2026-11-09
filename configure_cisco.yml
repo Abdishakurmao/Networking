@@ -1,29 +1,105 @@
 ---
-- name: Configure Cisco IOS interface and OSPF
-  hosts: cisco_ios
+- name: Configure Cisco IOS router-on-a-stick and OSPF
+  hosts: routers
   gather_facts: false
 
   vars:
-    interface_name: GigabitEthernet1
-    interface_ip: 192.168.10.1
-    interface_mask: 255.255.255.0
+    router_trunk_interface: GigabitEthernet0/0
+    router_id: 1.1.1.1
     ospf_process_id: 1
-    ospf_router_id: 1.1.1.1
-    ospf_network: 192.168.10.0
-    ospf_wildcard: 0.0.0.255
     ospf_area: 0
+    vlans:
+      - id: 10
+        name: USERS
+        subnet: 192.168.10.0
+        wildcard: 0.0.0.255
+        gateway: 192.168.10.1
+        mask: 255.255.255.0
+      - id: 20
+        name: SERVERS
+        subnet: 192.168.20.0
+        wildcard: 0.0.0.255
+        gateway: 192.168.20.1
+        mask: 255.255.255.0
 
   tasks:
-    - name: Configure interface address and enable interface
+    - name: Configure 802.1Q router subinterfaces for VLAN gateways
       cisco.ios.ios_config:
-        parents: "interface {{ interface_name }}"
+        parents: "interface {{ router_trunk_interface }}.{{ item.id }}"
         lines:
-          - "ip address {{ interface_ip }} {{ interface_mask }}"
+          - "encapsulation dot1Q {{ item.id }}"
+          - "ip address {{ item.gateway }} {{ item.mask }}"
+          - no shutdown
+      loop: "{{ vlans }}"
+
+    - name: Enable the physical router trunk interface
+      cisco.ios.ios_config:
+        parents: "interface {{ router_trunk_interface }}"
+        lines:
           - no shutdown
 
-    - name: Configure OSPF process and advertise interface network
+    - name: Advertise VLAN subnets in OSPF area {{ ospf_area }}
+      cisco.ios.ios_config:
+        parents: "router ospf {{ ospf_process_id }}"
+        lines:
+          - "router-id {{ router_id }}"
+          - "network {{ item.subnet }} {{ item.wildcard }} area {{ ospf_area }}"
+      loop: "{{ vlans }}"
+
+- name: Configure Cisco IOS switch VLANs, access ports, trunk, and management SVI
+  hosts: switches
+  gather_facts: false
+
+  vars:
+    router_trunk_port: GigabitEthernet1/0/1
+    management_vlan_id: 10
+    management_ip: 192.168.10.2
+    management_mask: 255.255.255.0
+    management_gateway: 192.168.10.1
+    access_port_assignments:
+      - ports: GigabitEthernet1/0/2-10
+        vlan: 10
+      - ports: GigabitEthernet1/0/11-20
+        vlan: 20
+    vlans:
+      - id: 10
+        name: USERS
+      - id: 20
+        name: SERVERS
+
+  tasks:
+    - name: Create VLANs
       cisco.ios.ios_config:
         lines:
-          - "router ospf {{ ospf_process_id }}"
-          - "router-id {{ ospf_router_id }}"
-          - "network {{ ospf_network }} {{ ospf_wildcard }} area {{ ospf_area }}"
+          - "vlan {{ item.id }}"
+          - "name {{ item.name }}"
+      loop: "{{ vlans }}"
+
+    - name: Configure access port ranges
+      cisco.ios.ios_config:
+        parents: "interface range {{ item.ports }}"
+        lines:
+          - switchport mode access
+          - "switchport access vlan {{ item.vlan }}"
+          - no shutdown
+      loop: "{{ access_port_assignments }}"
+
+    - name: Configure trunk to router and allow configured VLANs
+      cisco.ios.ios_config:
+        parents: "interface {{ router_trunk_port }}"
+        lines:
+          - switchport mode trunk
+          - switchport trunk allowed vlan 10,20
+          - no shutdown
+
+    - name: Configure switch management SVI
+      cisco.ios.ios_config:
+        parents: "interface vlan {{ management_vlan_id }}"
+        lines:
+          - "ip address {{ management_ip }} {{ management_mask }}"
+          - no shutdown
+
+    - name: Set switch default gateway
+      cisco.ios.ios_config:
+        lines:
+          - "ip default-gateway {{ management_gateway }}"
